@@ -32,7 +32,11 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	hash, _ := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to hash password"})
+		return
+	}
 
 	user := models.User{
 		Username:     req.Username,
@@ -45,10 +49,15 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	token, _ := jwtutil.GenerateToken(user.ID)
+	accessToken, refreshToken, err := jwtutil.GenerateTokenPair(user.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate tokens"})
+		return
+	}
 
 	c.JSON(http.StatusCreated, gin.H{
-		"access_token": token,
+		"access_token":  accessToken,
+		"refresh_token": refreshToken,
 	})
 }
 
@@ -78,10 +87,56 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	token, _ := jwtutil.GenerateToken(user.ID)
+	accessToken, refreshToken, err := jwtutil.GenerateTokenPair(user.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate tokens"})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"access_token": token,
+		"access_token":  accessToken,
+		"refresh_token": refreshToken,
+	})
+}
+
+type refreshRequest struct {
+	RefreshToken string `json:"refresh_token" binding:"required"`
+}
+
+func (h *AuthHandler) Refresh(c *gin.Context) {
+	var req refreshRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	claims, err := jwtutil.ParseToken(req.RefreshToken)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid refresh token"})
+		return
+	}
+
+	if claims.TokenType != "refresh" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token type"})
+		return
+	}
+
+	// Verify user still exists
+	var user models.User
+	if err := h.DB.First(&user, "id = ?", claims.UserID).Error; err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
+		return
+	}
+
+	accessToken, refreshToken, err := jwtutil.GenerateTokenPair(user.ID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate tokens"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"access_token":  accessToken,
+		"refresh_token": refreshToken,
 	})
 }
 

@@ -613,11 +613,20 @@ export default function App() {
       wsRef.current.close();
     }
 
-    const ws = api.connectWebSocket(channelId, (event) => {
-      if (event.type === "NEW_MESSAGE") {
-        setMessages((prev) => [...prev, event.payload]);
+    const ws = api.connectWebSocket(
+      channelId,
+      (event) => {
+        if (event.type === "NEW_MESSAGE") {
+          setMessages((prev) => [...prev, event.payload]);
+        }
+      },
+      (error) => {
+        // Handle rate limit and other WS errors
+        const msg = error.error || "An error occurred";
+        const retryAfter = error.retry_after || 60;
+        alert(`${msg}. Please wait ${retryAfter} seconds.`);
       }
-    });
+    );
 
     wsRef.current = ws;
   }, []);

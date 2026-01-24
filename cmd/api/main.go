@@ -35,6 +35,9 @@ func main() {
 
 	r := gin.Default()
 
+	// Global rate limit for all requests
+	r.Use(middleware.StandardRateLimit())
+
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "ok"})
 	})
@@ -52,11 +55,12 @@ func main() {
 
 	r.GET("/ws", wsHandler.Handle)
 
+	// Auth routes with strict rate limit (5 req/min for login/register)
 	auth := r.Group("/auth")
 	{
-		auth.POST("/register", authHandler.Register)
-		auth.POST("/login", authHandler.Login)
-		auth.POST("/refresh", authHandler.Refresh)
+		auth.POST("/register", middleware.StrictRateLimit(), authHandler.Register)
+		auth.POST("/login", middleware.StrictRateLimit(), authHandler.Login)
+		auth.POST("/refresh", middleware.StrictRateLimit(), authHandler.Refresh)
 		auth.GET("/me", middleware.AuthRequired(), authHandler.Me)
 	}
 
@@ -83,7 +87,8 @@ func main() {
 
 	channels := r.Group("/channels", middleware.AuthRequired())
 	{
-		channels.POST("/:id/messages", messageHandler.Create)
+		// Message sending has stricter rate limit
+		channels.POST("/:id/messages", middleware.MessageRateLimit(), messageHandler.Create)
 		channels.GET("/:id/messages", messageHandler.List)
 	}
 
@@ -97,5 +102,6 @@ func main() {
 		port = "8080"
 	}
 
+	log.Println("Starting server with rate limiting enabled")
 	r.Run(":" + port)
 }

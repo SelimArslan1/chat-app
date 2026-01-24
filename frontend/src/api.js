@@ -27,6 +27,12 @@ async function apiRequest(endpoint, options = {}, retry = true) {
         }
     }
 
+    // Handle rate limit errors with user-friendly message
+    if (response.status === 429) {
+        const retryAfter = data.retry_after || 60;
+        throw new Error(`Too many requests. Please wait ${Math.ceil(retryAfter)} seconds and try again.`);
+    }
+
     if (!response.ok) {
         throw new Error(data.error || `Request failed with status ${response.status}`);
     }
@@ -184,7 +190,7 @@ export async function joinServerWithCode(code) {
 
 // ===== WEBSOCKET =====
 
-export function connectWebSocket(channelId, onMessage) {
+export function connectWebSocket(channelId, onMessage, onError) {
     const token = getToken();
     if (!token) return null;
 
@@ -196,6 +202,12 @@ export function connectWebSocket(channelId, onMessage) {
     ws.onmessage = (event) => {
         try {
             const data = JSON.parse(event.data);
+
+            if (data.type === 'ERROR' && onError) {
+                onError(data.payload);
+                return;
+            }
+
             onMessage(data);
         } catch (e) {
             console.error('WebSocket message parse error:', e);

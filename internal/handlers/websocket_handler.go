@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -17,10 +19,8 @@ import (
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
-		// In production, validate against allowed origins
 		allowedOrigins := os.Getenv("ALLOWED_ORIGINS")
 		if allowedOrigins == "" {
-			// Default: allow same-origin and localhost in development
 			origin := r.Header.Get("Origin")
 			return origin == "" ||
 				strings.HasPrefix(origin, "http://localhost") ||
@@ -34,6 +34,50 @@ var upgrader = websocket.Upgrader{
 		}
 		return false
 	},
+}
+
+// Message rate limiter for WebSocket
+type wsRateLimiter struct {
+	users  map[string]*userLimit
+	mu     sync.Mutex
+	rate   int
+	window time.Duration
+}
+
+type userLimit struct {
+	count    int
+	lastSeen time.Time
+}
+
+var msgLimiter = &wsRateLimiter{
+	users:  make(map[string]*userLimit),
+	rate:   30,             // 30 messages
+	window: time.Minute,    // per minute
+}
+
+func (rl *wsRateLimiter) isAllowed(userID string) bool {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	ul, exists := rl.users[userID]
+	if !exists {
+		rl.users[userID] = &userLimit{count: 1, lastSeen: time.Now()}
+		return true
+	}
+
+	if time.Since(ul.lastSeen) > rl.window {
+		ul.count = 1
+		ul.lastSeen = time.Now()
+		return true
+	}
+
+	if ul.count >= rl.rate {
+		return false
+	}
+
+	ul.count++
+	ul.lastSeen = time.Now()
+	return true
 }
 
 type WebSocketHandler struct {
@@ -97,7 +141,20 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 			return
 		}
 
-		// Fetch user to get username
+		// Check rate limit
+		if !msgLimiter.isAllowed(c.UserID) {
+			// Send rate limit error to client
+			errMsg, _ := json.Marshal(ws.ServerEvent{
+				Type:    "ERROR",
+				Payload: map[string]interface{}{
+					"error":       "rate limit exceeded",
+					"retry_after": 60,
+				},
+			})
+			c.Send <- errMsg
+			return
+		}
+
 		var user models.User
 		if err := h.DB.First(&user, "id = ?", c.UserID).Error; err != nil {
 			return

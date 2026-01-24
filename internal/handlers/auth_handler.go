@@ -1,7 +1,10 @@
 package handlers
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
@@ -17,6 +20,12 @@ type AuthHandler struct {
 
 func NewAuthHandler(db *gorm.DB) *AuthHandler {
 	return &AuthHandler{DB: db}
+}
+
+func generateSecureToken() string {
+	bytes := make([]byte, 32)
+	rand.Read(bytes)
+	return hex.EncodeToString(bytes)
 }
 
 type registerRequest struct {
@@ -49,15 +58,24 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	accessToken, refreshToken, err := jwtutil.GenerateTokenPair(user.ID)
+	accessToken, err := jwtutil.GenerateToken(user.ID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate tokens"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
 		return
 	}
 
+	// Create refresh token in DB
+	refreshTokenStr := generateSecureToken()
+	refreshToken := models.RefreshToken{
+		UserID:    user.ID,
+		Token:     refreshTokenStr,
+		ExpiresAt: time.Now().Add(7 * 24 * time.Hour),
+	}
+	h.DB.Create(&refreshToken)
+
 	c.JSON(http.StatusCreated, gin.H{
 		"access_token":  accessToken,
-		"refresh_token": refreshToken,
+		"refresh_token": refreshTokenStr,
 	})
 }
 
@@ -87,15 +105,24 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	accessToken, refreshToken, err := jwtutil.GenerateTokenPair(user.ID)
+	accessToken, err := jwtutil.GenerateToken(user.ID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate tokens"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
 		return
 	}
 
+	// Create refresh token in DB
+	refreshTokenStr := generateSecureToken()
+	refreshToken := models.RefreshToken{
+		UserID:    user.ID,
+		Token:     refreshTokenStr,
+		ExpiresAt: time.Now().Add(7 * 24 * time.Hour),
+	}
+	h.DB.Create(&refreshToken)
+
 	c.JSON(http.StatusOK, gin.H{
 		"access_token":  accessToken,
-		"refresh_token": refreshToken,
+		"refresh_token": refreshTokenStr,
 	})
 }
 
@@ -110,34 +137,87 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		return
 	}
 
-	claims, err := jwtutil.ParseToken(req.RefreshToken)
-	if err != nil {
+	// Find refresh token in DB
+	var storedToken models.RefreshToken
+	if err := h.DB.Where("token = ?", req.RefreshToken).First(&storedToken).Error; err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid refresh token"})
 		return
 	}
 
-	if claims.TokenType != "refresh" {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid token type"})
+	// Check if token is valid
+	if !storedToken.IsValid() {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh token expired or revoked"})
 		return
 	}
 
+	// Revoke old token
+	now := time.Now()
+	h.DB.Model(&storedToken).Update("revoked_at", now)
+
 	// Verify user still exists
 	var user models.User
-	if err := h.DB.First(&user, "id = ?", claims.UserID).Error; err != nil {
+	if err := h.DB.First(&user, "id = ?", storedToken.UserID).Error; err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "user not found"})
 		return
 	}
 
-	accessToken, refreshToken, err := jwtutil.GenerateTokenPair(user.ID)
+	// Generate new tokens
+	accessToken, err := jwtutil.GenerateToken(user.ID)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate tokens"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to generate token"})
 		return
 	}
 
+	// Create new refresh token
+	refreshTokenStr := generateSecureToken()
+	refreshToken := models.RefreshToken{
+		UserID:    user.ID,
+		Token:     refreshTokenStr,
+		ExpiresAt: time.Now().Add(7 * 24 * time.Hour),
+	}
+	h.DB.Create(&refreshToken)
+
 	c.JSON(http.StatusOK, gin.H{
 		"access_token":  accessToken,
-		"refresh_token": refreshToken,
+		"refresh_token": refreshTokenStr,
 	})
+}
+
+type logoutRequest struct {
+	RefreshToken string `json:"refresh_token" binding:"required"`
+}
+
+func (h *AuthHandler) Logout(c *gin.Context) {
+	var req logoutRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Revoke the refresh token
+	now := time.Now()
+	result := h.DB.Model(&models.RefreshToken{}).
+		Where("token = ? AND revoked_at IS NULL", req.RefreshToken).
+		Update("revoked_at", now)
+
+	if result.RowsAffected == 0 {
+		c.JSON(http.StatusOK, gin.H{"status": "already logged out"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "logged out"})
+}
+
+// LogoutAll revokes all refresh tokens for the user
+func (h *AuthHandler) LogoutAll(c *gin.Context) {
+	userID := c.GetString("user_id")
+
+	now := time.Now()
+	h.DB.Model(&models.RefreshToken{}).
+		Where("user_id = ? AND revoked_at IS NULL", userID).
+		Update("revoked_at", now)
+
+	c.JSON(http.StatusOK, gin.H{"status": "logged out from all devices"})
 }
 
 func (h *AuthHandler) Me(c *gin.Context) {

@@ -104,7 +104,28 @@ export async function getMe() {
     return apiRequest('/auth/me');
 }
 
-export function logout() {
+export async function logout() {
+    const refreshToken = localStorage.getItem('refresh_token');
+
+    // Revoke token on server
+    if (refreshToken) {
+        try {
+            await fetch(`${API_BASE}/auth/logout`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refresh_token: refreshToken }),
+            });
+        } catch {
+            // Ignore errors, still clear local storage
+        }
+    }
+
+    localStorage.removeItem('token');
+    localStorage.removeItem('refresh_token');
+}
+
+export async function logoutAll() {
+    await apiRequest('/auth/logout-all', { method: 'POST' });
     localStorage.removeItem('token');
     localStorage.removeItem('refresh_token');
 }

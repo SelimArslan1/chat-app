@@ -27,6 +27,7 @@ func main() {
 		&models.Message{},
 		&models.ServerMember{},
 		&models.ServerInvite{},
+		&models.RefreshToken{},
 	)
 
 	if err != nil {
@@ -61,6 +62,8 @@ func main() {
 		auth.POST("/register", middleware.StrictRateLimit(), authHandler.Register)
 		auth.POST("/login", middleware.StrictRateLimit(), authHandler.Login)
 		auth.POST("/refresh", middleware.StrictRateLimit(), authHandler.Refresh)
+		auth.POST("/logout", authHandler.Logout)
+		auth.POST("/logout-all", middleware.AuthRequired(), authHandler.LogoutAll)
 		auth.GET("/me", middleware.AuthRequired(), authHandler.Me)
 	}
 

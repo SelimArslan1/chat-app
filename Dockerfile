@@ -1,6 +1,6 @@
 # ---------- Build stage ----------
 
-FROM golang:1.25-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
 WORKDIR /app
 
@@ -14,7 +14,8 @@ RUN go mod download
 # Copy the rest of the source
 COPY . .
 
-# Build the binary
+# Tidy and build the binary
+RUN go mod tidy
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o app ./cmd/api
 
 

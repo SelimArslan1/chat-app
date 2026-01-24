@@ -282,8 +282,6 @@ function ServerSidebar({ servers, selectedServer, onSelectServer, onCreateServer
           </div>
         ))}
 
-        <div className="server-divider"></div>
-
         <div
           className="server-icon add-server-btn"
           onClick={() => setShowModal(true)}

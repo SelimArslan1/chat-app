@@ -142,9 +142,131 @@ function CreateModal({ title, placeholder, onSubmit, onClose }) {
   );
 }
 
+// ===== INVITE MODAL COMPONENT =====
+function InviteModal({ server, onClose, onInviteCreated }) {
+  const [inviteCode, setInviteCode] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const createInvite = async () => {
+    setLoading(true);
+    try {
+      const invite = await api.createInvite(server.id);
+      setInviteCode(invite.code);
+      if (onInviteCreated) onInviteCreated(invite);
+    } catch (err) {
+      console.error("Failed to create invite:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(inviteCode);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h2>Invite to {server.name}</h2>
+        <p>Share this code with friends to invite them to your server.</p>
+
+        {inviteCode ? (
+          <div className="invite-code-display">
+            <input
+              type="text"
+              value={inviteCode}
+              readOnly
+              className="invite-code-input"
+            />
+            <button className="btn btn-primary" onClick={copyToClipboard}>
+              {copied ? "Copied!" : "Copy"}
+            </button>
+          </div>
+        ) : (
+          <button
+            className="btn btn-primary"
+            onClick={createInvite}
+            disabled={loading}
+            style={{ width: "100%" }}
+          >
+            {loading ? <span className="loading-spinner"></span> : "Generate Invite Code"}
+          </button>
+        )}
+
+        <div className="modal-actions">
+          <button type="button" className="btn btn-secondary" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===== JOIN SERVER MODAL COMPONENT =====
+function JoinServerModal({ onClose, onJoined }) {
+  const [code, setCode] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!code.trim()) return;
+    setError("");
+    setLoading(true);
+
+    try {
+      const result = await api.joinServerWithCode(code.trim());
+      if (onJoined) onJoined(result.server);
+      onClose();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h2>Join a Server</h2>
+        <p>Enter an invite code to join a server.</p>
+
+        {error && <div className="error-message">{error}</div>}
+
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label>Invite Code</label>
+            <input
+              type="text"
+              placeholder="Enter invite code"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              autoFocus
+              required
+            />
+          </div>
+          <div className="modal-actions">
+            <button type="button" className="btn btn-secondary" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" className="btn btn-primary" disabled={loading}>
+              {loading ? <span className="loading-spinner"></span> : "Join Server"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ===== SERVER SIDEBAR COMPONENT =====
-function ServerSidebar({ servers, selectedServer, onSelectServer, onCreateServer }) {
+function ServerSidebar({ servers, selectedServer, onSelectServer, onCreateServer, onJoinServer }) {
   const [showModal, setShowModal] = useState(false);
+  const [showJoinModal, setShowJoinModal] = useState(false);
 
   return (
     <>
@@ -169,6 +291,15 @@ function ServerSidebar({ servers, selectedServer, onSelectServer, onCreateServer
         >
           +
         </div>
+
+        <div
+          className="server-icon join-server-btn"
+          onClick={() => setShowJoinModal(true)}
+          title="Join Server"
+          style={{ background: "var(--bg-tertiary)", color: "var(--accent-secondary)" }}
+        >
+          →
+        </div>
       </div>
 
       {showModal && (
@@ -179,6 +310,15 @@ function ServerSidebar({ servers, selectedServer, onSelectServer, onCreateServer
           onClose={() => setShowModal(false)}
         />
       )}
+
+      {showJoinModal && (
+        <JoinServerModal
+          onClose={() => setShowJoinModal(false)}
+          onJoined={(server) => {
+            if (onJoinServer) onJoinServer(server);
+          }}
+        />
+      )}
     </>
   );
 }
@@ -186,21 +326,34 @@ function ServerSidebar({ servers, selectedServer, onSelectServer, onCreateServer
 // ===== CHANNEL SIDEBAR COMPONENT =====
 function ChannelSidebar({ server, channels, selectedChannel, onSelectChannel, onCreateChannel, user, onLogout }) {
   const [showModal, setShowModal] = useState(false);
+  const [showInviteModal, setShowInviteModal] = useState(false);
 
   return (
     <>
       <div className="channel-sidebar">
         <div className="channel-header">
           <h2>{server?.name || "Select a Server"}</h2>
-          {server && (
-            <button
-              className="btn btn-ghost"
-              onClick={() => setShowModal(true)}
-              title="Create Channel"
-            >
-              +
-            </button>
-          )}
+          <div style={{ display: "flex", gap: "4px" }}>
+            {server && (
+              <>
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => setShowInviteModal(true)}
+                  title="Invite People"
+                  style={{ fontSize: "0.9rem" }}
+                >
+                  📨
+                </button>
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => setShowModal(true)}
+                  title="Create Channel"
+                >
+                  +
+                </button>
+              </>
+            )}
+          </div>
         </div>
 
         <div className="channel-list">
@@ -252,6 +405,13 @@ function ChannelSidebar({ server, channels, selectedChannel, onSelectChannel, on
           onClose={() => setShowModal(false)}
         />
       )}
+
+      {showInviteModal && server && (
+        <InviteModal
+          server={server}
+          onClose={() => setShowInviteModal(false)}
+        />
+      )}
     </>
   );
 }
@@ -266,11 +426,11 @@ function MessageItem({ message }) {
   return (
     <div className="message-item">
       <div className="message-avatar">
-        {message.user_id?.substring(0, 2).toUpperCase() || "??"}
+        {(message.username || "?").charAt(0).toUpperCase()}
       </div>
       <div className="message-content">
         <div className="message-header">
-          <span className="message-author">User {message.user_id?.substring(0, 8)}</span>
+          <span className="message-author">{message.username || "Unknown User"}</span>
           <span className="message-time">{formatTime(message.created_at)}</span>
         </div>
         <div className="message-text">{message.content}</div>
@@ -517,6 +677,16 @@ export default function App() {
     }
   };
 
+  const handleJoinServer = (server) => {
+    if (server && server.id) {
+      setServers((prev) => [...prev, server]);
+      setSelectedServer(server);
+    } else {
+      // Reload servers to get the joined one
+      loadServers();
+    }
+  };
+
   if (loading) {
     return (
       <div className="auth-screen">
@@ -536,6 +706,7 @@ export default function App() {
         selectedServer={selectedServer}
         onSelectServer={handleSelectServer}
         onCreateServer={handleCreateServer}
+        onJoinServer={handleJoinServer}
       />
 
       <ChannelSidebar

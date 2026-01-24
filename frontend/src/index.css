@@ -5,43 +5,47 @@
   --bg-tertiary: #1e1e28;
   --bg-hover: #252532;
   --bg-active: #2d2d3d;
-  
+
   --text-primary: #e4e4e7;
   --text-secondary: #a1a1aa;
   --text-muted: #71717a;
-  
+
   --accent-primary: #7c3aed;
   --accent-secondary: #8b5cf6;
   --accent-hover: #6d28d9;
-  
+
   --success: #10b981;
   --error: #ef4444;
   --warning: #f59e0b;
-  
+
   --border-color: #27272a;
   --shadow-color: rgba(0, 0, 0, 0.4);
-  
+
   --server-size: 48px;
   --channel-sidebar-width: 240px;
   --message-spacing: 1.25rem;
-  
+
   --radius-sm: 4px;
   --radius-md: 8px;
   --radius-lg: 16px;
   --radius-full: 50%;
-  
+
   --transition-fast: 150ms ease;
   --transition-normal: 200ms ease;
 }
 
 /* ===== RESET & BASE ===== */
-*, *::before, *::after {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-html, body, #root {
+html,
+body,
+#root {
   height: 100%;
   width: 100%;
   overflow: hidden;
@@ -56,7 +60,9 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-input, button, textarea {
+input,
+button,
+textarea {
   font-family: inherit;
   font-size: inherit;
 }
@@ -129,6 +135,7 @@ input, button, textarea {
     opacity: 0;
     transform: translateY(20px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -645,8 +652,13 @@ input, button, textarea {
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 .modal {
@@ -685,6 +697,31 @@ input, button, textarea {
   background: var(--bg-hover);
 }
 
+/* ===== INVITE CODE ===== */
+.invite-code-display {
+  display: flex;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.invite-code-input {
+  flex: 1;
+  background: var(--bg-tertiary);
+  border: 2px solid var(--accent-primary);
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  color: var(--text-primary);
+  font-size: 1.25rem;
+  font-weight: 600;
+  font-family: monospace;
+  letter-spacing: 2px;
+  text-align: center;
+}
+
+.invite-code-input:focus {
+  outline: none;
+}
+
 /* ===== LOADING ===== */
 .loading-spinner {
   width: 20px;
@@ -696,7 +733,9 @@ input, button, textarea {
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ===== NO SERVER SELECTED ===== */

@@ -9,4 +9,6 @@ type Message struct {
 	Content   string     `gorm:"not null" json:"content"`
 	CreatedAt time.Time  `json:"created_at"`
 	DeletedAt *time.Time `gorm:"index" json:"deleted_at,omitempty"`
+	// Username is populated at query time, not stored in DB
+	Username string `gorm:"-" json:"username,omitempty"`
 }

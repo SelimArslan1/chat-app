@@ -97,10 +97,17 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 			return
 		}
 
+		// Fetch user to get username
+		var user models.User
+		if err := h.DB.First(&user, "id = ?", c.UserID).Error; err != nil {
+			return
+		}
+
 		msg := models.Message{
 			UserID:    c.UserID,
 			ChannelID: c.ChannelID,
 			Content:   event.Content,
+			Username:  user.Username,
 		}
 
 		if err := h.DB.Create(&msg).Error; err != nil {

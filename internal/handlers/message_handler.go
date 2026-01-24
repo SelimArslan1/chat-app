@@ -109,6 +109,24 @@ func (h *MessageHandler) List(c *gin.Context) {
 	var messages []models.Message
 	query.Find(&messages)
 
+	// Populate usernames
+	userIDs := make([]string, 0, len(messages))
+	for _, msg := range messages {
+		userIDs = append(userIDs, msg.UserID)
+	}
+
+	var users []models.User
+	h.DB.Where("id IN ?", userIDs).Find(&users)
+
+	userMap := make(map[string]string)
+	for _, u := range users {
+		userMap[u.ID] = u.Username
+	}
+
+	for i := range messages {
+		messages[i].Username = userMap[messages[i].UserID]
+	}
+
 	c.JSON(http.StatusOK, messages)
 }
 

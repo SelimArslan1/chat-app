@@ -11,6 +11,7 @@ import (
 	"github.com/SelimArslan1/chat-app/internal/handlers"
 	"github.com/SelimArslan1/chat-app/internal/middleware"
 	"github.com/SelimArslan1/chat-app/internal/models"
+	"github.com/SelimArslan1/chat-app/internal/storage"
 	"github.com/SelimArslan1/chat-app/internal/websocket"
 )
 
@@ -32,6 +33,14 @@ func main() {
 
 	if err != nil {
 		log.Fatal("auto-migrate failed:", err)
+	}
+
+	// Initialize MinIO storage
+	minioClient, err := storage.NewMinioClient()
+	if err != nil {
+		log.Println("Warning: MinIO not available:", err)
+	} else {
+		log.Println("MinIO connected")
 	}
 
 	r := gin.Default()
@@ -65,6 +74,13 @@ func main() {
 		auth.POST("/logout", authHandler.Logout)
 		auth.POST("/logout-all", middleware.AuthRequired(), authHandler.LogoutAll)
 		auth.GET("/me", middleware.AuthRequired(), authHandler.Me)
+	}
+
+	// Upload route (requires auth and MinIO)
+	if minioClient != nil {
+		uploadHandler := handlers.NewUploadHandler(minioClient)
+		r.POST("/upload", middleware.AuthRequired(), uploadHandler.Upload)
+		r.GET("/files/:filename", uploadHandler.GetFile)
 	}
 
 	servers := r.Group("/servers", middleware.AuthRequired())

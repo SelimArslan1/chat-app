@@ -1,6 +1,26 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import * as api from "./api";
 
+// ===== IMAGE LIGHTBOX COMPONENT =====
+function ImageLightbox({ imageUrl, onClose }) {
+  useEffect(() => {
+    const handleEscape = (e) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [onClose]);
+
+  return (
+    <div className="lightbox-overlay" onClick={onClose}>
+      <button className="lightbox-close" onClick={onClose}>×</button>
+      <div className="lightbox-content" onClick={(e) => e.stopPropagation()}>
+        <img src={imageUrl} alt="Full size" />
+      </div>
+    </div>
+  );
+}
+
 // ===== AUTH SCREEN COMPONENT =====
 function AuthScreen({ onAuth }) {
   const [isLogin, setIsLogin] = useState(true);
@@ -415,7 +435,7 @@ function ChannelSidebar({ server, channels, selectedChannel, onSelectChannel, on
 }
 
 // ===== MESSAGE ITEM COMPONENT =====
-function MessageItem({ message }) {
+function MessageItem({ message, onImageClick }) {
   const formatTime = (dateStr) => {
     const date = new Date(dateStr);
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -431,7 +451,16 @@ function MessageItem({ message }) {
           <span className="message-author">{message.username || "Unknown User"}</span>
           <span className="message-time">{formatTime(message.created_at)}</span>
         </div>
-        <div className="message-text">{message.content}</div>
+        {message.content && <div className="message-text">{message.content}</div>}
+        {message.image_url && (
+          <div className="message-image">
+            <img
+              src={message.image_url}
+              alt="Shared image"
+              onClick={() => onImageClick(message.image_url)}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -440,16 +469,36 @@ function MessageItem({ message }) {
 // ===== CHAT AREA COMPONENT =====
 function ChatArea({ channel, messages, onSendMessage }) {
   const [input, setInput] = useState("");
+  const [selectedImage, setSelectedImage] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState(null);
   const messagesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSend = () => {
-    if (!input.trim()) return;
-    onSendMessage(input.trim());
+  const handleSend = async () => {
+    if (!input.trim() && !selectedImage) return;
+
+    let imageUrl = null;
+
+    if (selectedImage) {
+      setUploading(true);
+      try {
+        imageUrl = await api.uploadImage(selectedImage);
+      } catch (err) {
+        alert("Failed to upload image: " + err.message);
+        setUploading(false);
+        return;
+      }
+      setUploading(false);
+    }
+
+    onSendMessage(input.trim(), imageUrl);
     setInput("");
+    setSelectedImage(null);
   };
 
   const handleKeyDown = (e) => {
@@ -487,14 +536,45 @@ function ChatArea({ channel, messages, onSendMessage }) {
               <p>This is the beginning of the channel. Send a message to get started!</p>
             </div>
           ) : (
-            messages.map((msg) => <MessageItem key={msg.id} message={msg} />)
+            messages.map((msg) => (
+              <MessageItem
+                key={msg.id}
+                message={msg}
+                onImageClick={(url) => setLightboxImage(url)}
+              />
+            ))
           )}
           <div ref={messagesEndRef} />
         </div>
       </div>
 
       <div className="message-input-container">
+        {selectedImage && (
+          <div className="image-preview">
+            <img src={URL.createObjectURL(selectedImage)} alt="Preview" />
+            <button className="remove-image" onClick={() => setSelectedImage(null)}>×</button>
+          </div>
+        )}
         <div className="message-input-wrapper">
+          <input
+            type="file"
+            ref={fileInputRef}
+            style={{ display: 'none' }}
+            accept="image/jpeg,image/png,image/gif,image/webp"
+            onChange={(e) => {
+              if (e.target.files[0]) {
+                setSelectedImage(e.target.files[0]);
+              }
+            }}
+          />
+          <button
+            className="upload-btn"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            title="Upload image"
+          >
+            📷
+          </button>
           <input
             className="message-input"
             type="text"
@@ -502,12 +582,20 @@ function ChatArea({ channel, messages, onSendMessage }) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
+            disabled={uploading}
           />
-          <button className="send-btn" onClick={handleSend}>
-            ➤
+          <button className="send-btn" onClick={handleSend} disabled={uploading}>
+            {uploading ? "..." : "➤"}
           </button>
         </div>
       </div>
+
+      {lightboxImage && (
+        <ImageLightbox
+          imageUrl={lightboxImage}
+          onClose={() => setLightboxImage(null)}
+        />
+      )}
     </div>
   );
 }
@@ -675,11 +763,12 @@ export default function App() {
     setSelectedChannel(channel);
   };
 
-  const handleSendMessage = (content) => {
+  const handleSendMessage = (content, imageUrl) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
         type: "SEND_MESSAGE",
         content,
+        image_url: imageUrl || "",
       }));
     }
   };

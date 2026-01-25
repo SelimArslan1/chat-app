@@ -7,6 +7,7 @@ type Message struct {
 	ChannelID string     `gorm:"type:uuid;index;not null" json:"channel_id"`
 	UserID    string     `gorm:"type:uuid;index" json:"user_id"`
 	Content   string     `gorm:"not null" json:"content"`
+	ImageURL  string     `json:"image_url,omitempty"`
 	CreatedAt time.Time  `json:"created_at"`
 	DeletedAt *time.Time `gorm:"index" json:"deleted_at,omitempty"`
 	// Username is populated at query time, not stored in DB

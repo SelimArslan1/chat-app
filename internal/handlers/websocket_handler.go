@@ -51,8 +51,8 @@ type userLimit struct {
 
 var msgLimiter = &wsRateLimiter{
 	users:  make(map[string]*userLimit),
-	rate:   30,             // 30 messages
-	window: time.Minute,    // per minute
+	rate:   30,          // 30 messages
+	window: time.Minute, // per minute
 }
 
 func (rl *wsRateLimiter) isAllowed(userID string) bool {
@@ -145,7 +145,7 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 		if !msgLimiter.isAllowed(c.UserID) {
 			// Send rate limit error to client
 			errMsg, _ := json.Marshal(ws.ServerEvent{
-				Type:    "ERROR",
+				Type: "ERROR",
 				Payload: map[string]interface{}{
 					"error":       "rate limit exceeded",
 					"retry_after": 60,
@@ -164,6 +164,7 @@ func (h *WebSocketHandler) Handle(c *gin.Context) {
 			UserID:    c.UserID,
 			ChannelID: c.ChannelID,
 			Content:   event.Content,
+			ImageURL:  event.ImageURL,
 			Username:  user.Username,
 		}
 

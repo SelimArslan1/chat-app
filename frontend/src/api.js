@@ -134,6 +134,32 @@ export function getToken() {
     return localStorage.getItem('token');
 }
 
+// ===== UPLOAD =====
+
+export async function uploadImage(file) {
+    const token = getToken();
+    if (!token) throw new Error('Not authenticated');
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${API_BASE}/upload`, {
+        method: 'POST',
+        headers: {
+            Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+        throw new Error(data.error || 'Upload failed');
+    }
+
+    return data.url;
+}
+
 // ===== SERVERS =====
 
 export async function getServers() {

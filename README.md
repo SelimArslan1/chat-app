@@ -1,7 +1,5 @@
 # Real-Time Chat Application
 
-A production-ready real-time chat platform demonstrating modern backend engineering practices with Go, WebSockets, and PostgreSQL.
-
 ### Authentication & Security
 - **JWT-based auth** with short-lived access tokens (15 min) and long-lived refresh tokens (7 days)
 - **Token revocation** via database-stored refresh tokens - prevents token reuse after logout
